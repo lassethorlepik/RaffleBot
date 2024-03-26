@@ -1,0 +1,50 @@
+version: '3.9'
+services:
+  db:
+    container_name: db
+    image: postgres:15.6
+    build: ./postgresql
+    restart: always
+    environment:
+      POSTGRES_USER: $DBUSER
+      POSTGRES_PASSWORD: $PASSWORD
+      POSTGRES_DB: $DB
+      TZ: "Europe/Helsinki"
+    volumes:
+      - ./postgresql:/docker-entrypoint-initdb.d
+      - ./postgresql/data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  pgadmin:
+    container_name: pgadmin4_container
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: example@example.com
+      PGADMIN_DEFAULT_PASSWORD: example123
+      TZ: "Europe/Helsinki"
+    ports:
+      - "80:80"
+
+  main:
+    build: ./app
+    restart: always
+    environment:
+      API_TOKEN: $API_TOKEN
+      HOST: db
+      DB: $DB
+      DBUSER: $DBUSER
+      PASSWORD: $PASSWORD
+      ROOT: $ROOT
+      PORT: 5432
+      TZ: "Europe/Helsinki"
+    volumes:
+      - ./app:/~/Raffle/app
+      - ./logs:/~/Raffle/logs
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
+  logs:

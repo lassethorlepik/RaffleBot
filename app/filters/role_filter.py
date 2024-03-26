@@ -10,7 +10,7 @@ class RoleCheck(Filter):
     async def __call__(self, query_or_message: Union[types.Message, types.CallbackQuery]) -> bool:  
         if self.role == "admin":  # role = 1 - admin
             return query_or_message.from_user.id in (await get_user_by_role("admin"))
-        elif  self.role == "customer":  # role = 0 - customer
+        elif self.role == "customer":  # role = 0 - customer
             return query_or_message.from_user.id in (await get_user_by_role("customer"))
         else:
             return False
@@ -18,7 +18,7 @@ class RoleCheck(Filter):
 async def role_check_function(query_or_message_id, role) -> bool:  
         if role == "admin":
             return query_or_message_id in (await get_user_by_role("admin"))
-        elif  role == "customer":
+        elif role == "customer":
             return query_or_message_id in (await get_user_by_role("customer"))
         else:
             return False

@@ -14,6 +14,7 @@ BACKUP_FOLDER = "/backups"
 BACKUP_INTERVAL = 24  # hours
 LAST_BACKUP_FILENAME = f"{BACKUP_FOLDER}/last_backup.txt"
 
+CODE_LENGTH = 8  # Warning: Changing this will make the old codes (that are over new limit) un-redeemable, this can be reversed by changing the CODE_LENGTH back.
 
 async def get_username(user_id: int) -> str:
     "Get username based on telegram id."
@@ -26,7 +27,7 @@ async def get_username(user_id: int) -> str:
         return "@NotFound"
 
 
-def generate_raffle_code() -> str:
+async def generate_raffle_code() -> str:
     "Generate a secure and unpredicable code, that is 8-characters long."
     attempt = 0
     max_attempts = 10
@@ -34,22 +35,17 @@ def generate_raffle_code() -> str:
         attempt += 1
         
         # Use only uppercase for readablity
-        charset = string.ascii_uppercase + "1234567890!@#$%&*"  # 2887378820390246558653190730940416 Variations for security
+        charset = string.ascii_uppercase + "1234567890!@#$%&*"  # 2887378820390246558653190730940416 Variations for security (length 8)
         
-        # Ensure the code has at least one uppercase letter and one symbol
-        # by first selecting one character from each subset
-        code = [secrets.choice(string.ascii_uppercase), secrets.choice("!@#$%&*")]
-        
-        # Fill the rest of the code with random choices from the full charset
-        code += [secrets.choice(charset) for _ in range(6 - len(code))]
-        
-        # Shuffle the selected characters to randomize their order
-        secrets.SystemRandom().shuffle(code)
+        # Add random characters to a list (faster than concat)
+        code_characters = []
+        code_characters += [secrets.choice(charset) for _ in range(CODE_LENGTH)]
         
         # Join the characters into a single string
-        generated_code = "".join(code)
+        generated_code = "".join(code_characters)
         
-        if not code_exists(generated_code):
+        # Make sure the code has not been generated already, if it has been, then retry.
+        if not await code_exists(generated_code):
             return generated_code
         
     raise Exception("Raffle code generation out of attempts.")
@@ -63,12 +59,12 @@ async def add_code_to_db(code: str) -> None:
 
 async def redeem_code(code: str, userid: int) -> bool:
     "Mark a code redeemed by the given user, returns True on success."
-    if is_redeemed(code):
-        return False
-    else:
+    if await can_be_redeemed(code):
         sql = "UPDATE raffle SET redeemer_telegram_id = $1 WHERE code = $2"
         await sql_run(sql, userid, code, execute=True)
         return True
+    else:
+        return False
 
 
 async def check_user_redeemed(code: str, userid: int) -> bool:
@@ -78,9 +74,9 @@ async def check_user_redeemed(code: str, userid: int) -> bool:
     return result
 
 
-async def is_redeemed(code: str) -> bool:
-    """Check if given code has been redeemed, returns false if code does not exist."""
-    sql = """SELECT EXISTS(SELECT 1 FROM raffle WHERE code = $1 AND redeemer_telegram_id IS NOT NULL)"""
+async def can_be_redeemed(code: str) -> bool:
+    """Check if given code can be redeemed."""
+    sql = """SELECT EXISTS(SELECT 1 FROM raffle WHERE code = $1 AND redeemer_telegram_id IS NULL)"""
     result = await sql_run(sql, code, fetchval=True)
     return result
 
@@ -126,12 +122,17 @@ async def get_user_by_role(role: str):
     else:
         role = -1
     
-    sql = f"SELECT userid FROM users WHERE role >= $1"
+    sql = f"SELECT telegram_user_id FROM users WHERE role >= $1"
     result = await database.execute(sql, role, fetch=True)
     values = []
     for row in result:
         values.extend(iter(row))
     return values
+
+
+async def get_user_role(userid):
+    sql = f"SELECT role FROM users WHERE telegram_user_id = $1"
+    return await sql_run(sql, userid, fetchval=True)
 
 
 def backup_database() -> None:
